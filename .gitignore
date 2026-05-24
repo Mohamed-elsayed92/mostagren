@@ -1,0 +1,30 @@
+# Dependencies (ملفات الحزم والموديولات الواجب منعها)
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing (ملفات التيست)
+/coverage
+
+# Production (المجلد الناتج عن عمل Build للموقع)
+/dist
+
+# Local env files (ملفات المتغيرات البيئية السرية)
+.env
+.env.local
+.env.*.local
+
+# Log files (ملفات سجلات الأخطاء)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files (ملفات خاصة بمحرر الأكواد والنظام)
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
