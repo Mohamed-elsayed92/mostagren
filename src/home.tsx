@@ -54,7 +54,7 @@ function formatArabicDate(dateString: string): string {
 function Home() {
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     if (typeof window === "undefined") return INITIAL_TENANTS;
-    const saved = localStorage.getItem("tenants");
+    const saved = localStorage.getItem("tenants_v2");
     return saved ? (JSON.parse(saved) as Tenant[]) : INITIAL_TENANTS;
   });
 
