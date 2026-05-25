@@ -17,6 +17,7 @@ type Tenant = {
   rentPaid?: boolean;
   prepaidNextMonth?: boolean;
   contractFileData?: string;
+  paymentDate?: string;
 };
 
 const INITIAL_TENANTS: Tenant[] = [
@@ -44,7 +45,7 @@ function toArabicNumbers(num: number | string): string {
 }
 
 function formatArabicDate(dateString: string): string {
-  if (!dateString) return "";
+  if (!dateString) return "—"; // تعود بشرطة إذا لم يكن هناك تاريخ بعد
   const date = new Date(dateString);
   return new Intl.DateTimeFormat("ar-EG", {
     day: "numeric",
@@ -93,25 +94,11 @@ function Home() {
   function updateTenant(id: number, patch: Partial<Tenant>) {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
-const handleFileUpload = (tenantId: number, file: File | null) => {
-  if (!file) return;
 
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    const base64String = reader.result as string;
-
-    // تحديث حالة المستأجر بالاسم وببيانات الملف المشفرة
-    setTenants((prev) =>
-      prev.map((t) =>
-        t.id === tenantId
-          ? { ...t, contractFileName: file.name, contractFileData: base64String }
-          : t
-      )
-    );
-  };
-  
-  reader.readAsDataURL(file); // تحويل الملف إلى نص Base64 يمكن حفظه في الـ JSON
-};
+  function handleFileUpload(id: number, file: File | null) {
+    if (!file) return;
+    updateTenant(id, { contractFileName: file.name });
+  }
 
   const navigate = useNavigate();
 
@@ -153,6 +140,7 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
             rent: 0,
             rentPaid: false,
             prepaidNextMonth: false,
+            paymentDate: undefined, // تصفير التاريخ افتراضياً للشهر الجديد
           })),
         };
       }
@@ -160,7 +148,13 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
       nextSnap.tenants = nextSnap.tenants.map((t) => {
         const p = prepaid.find((x) => x.id === t.id);
         if (!p) return t;
-        return { ...t, rent: Number(p.rent) || 0, rentPaid: true, prepaidNextMonth: false };
+        return { 
+          ...t, 
+          rent: Number(p.rent) || 0, 
+          rentPaid: true, 
+          prepaidNextMonth: false,
+          paymentDate: p.paymentDate || now.toISOString().split("T")[0] // ترحيل تاريخ دفع المقدم
+        };
       });
       // أضف أي مستأجر مدفوع مقدماً غير موجود في السنابشوت القادم
       prepaid.forEach((p) => {
@@ -178,14 +172,12 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
 
     localStorage.setItem("tenants_archive", JSON.stringify(archive));
 
-    // تجهيز الشهر الجديد:
-    // - من دفع مقدماً → يصبح مدفوعاً تلقائياً بنفس قيمة الإيجار
-    // - الباقي → تصفّر قيمة الإيجار وحالة الدفع
+    // تجهيز الشهر الجديد في الصفحة الرئيسية حية:
     setTenants((prevT) =>
       prevT.map((t) =>
         t.prepaidNextMonth
           ? { ...t, rentPaid: true, prepaidNextMonth: false }
-          : { ...t, rent: 0, rentPaid: false },
+          : { ...t, rent: 0, rentPaid: false, paymentDate: undefined }, // تصفير حالة وتاريخ الدفع للباقي
       ),
     );
 
@@ -240,6 +232,7 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
                 <th className="px-3 py-2">رقم الدور</th>
                 <th className="px-3 py-2">قيمة الإيجار</th>
                 <th className="px-3 py-2">دفع مقدم</th>
+                <th className="px-3 py-2">تاريخ الدفع</th> {/* 💡 تم إضافة العمود في الهيدر */}
                 <th className="px-3 py-2">تاريخ انتهاء العقد</th>
                 <th className="px-3 py-2">العقد (PDF)</th>
               </tr>
@@ -261,7 +254,14 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
                         <input
                           type="checkbox"
                           checked={!!t.rentPaid}
-                          onChange={(e) => updateTenant(t.id, { rentPaid: e.target.checked })}
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            updateTenant(t.id, { 
+                              rentPaid: isChecked,
+                              // 💡 تسجيل تاريخ اليوم تلقائياً عند الدفع، ومسحه عند الإلغاء
+                              paymentDate: isChecked ? new Date().toISOString().split("T")[0] : undefined 
+                            });
+                          }}
                           className="h-4 w-4 accent-primary"
                           title="تم الدفع"
                         />
@@ -288,11 +288,36 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
                       <input
                         type="checkbox"
                         checked={!!t.prepaidNextMonth}
-                        onChange={(e) => updateTenant(t.id, { prepaidNextMonth: e.target.checked })}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked;
+                          updateTenant(t.id, { 
+                            prepaidNextMonth: isChecked,
+                            // 💡 تسجيل التاريخ أيضاً إذا تم تفعيل الدفع المقدم للمستقبل
+                            paymentDate: isChecked ? new Date().toISOString().split("T")[0] : t.paymentDate
+                          });
+                        }}
                         className="h-4 w-4 accent-primary"
                         title="دفع إيجار الشهر القادم مقدماً"
                       />
                     </td>
+
+                    {/* 💡 عمود تاريخ الدفع التفاعلي المضاف حديثاً للجدول */}
+                    <td className="px-3 py-2 relative">
+                      {t.rentPaid || t.prepaidNextMonth ? (
+                        <>
+                          <span className="text-xs text-muted-foreground block">{formatArabicDate(t.paymentDate || "")}</span>
+                          <input
+                            type="date"
+                            value={t.paymentDate || ""}
+                            onChange={(e) => updateTenant(t.id, { paymentDate: e.target.value })}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+
                     <td className="px-3 py-2 relative">
                       <span>{formatArabicDate(t.endDate)}</span>
                       <input
@@ -304,37 +329,23 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
                     </td>
                     <td className="px-3 py-2">
                       <input
+                        ref={(el) => {
+                          fileRefs.current[t.id] = el;
+                        }}
                         type="file"
-    accept="application/pdf"
-    className="hidden"
-    ref={(el) => { fileRefs.current[t.id] = el; }}
-    onChange={(e) => handleFileUpload(t.id, e.target.files?.[0] ?? null)}
-  />
-
-  <div className="flex gap-2">
-    {/* زر الرفع أو الاستبدال */}
-    <button
-      type="button"
-      onClick={() => fileRefs.current[t.id]?.click()}
-      className="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-primary-foreground text-sm"
-      title={t.contractFileName ?? "رفع عقد PDF"}
-    >
-      {t.contractFileName ? <FileText size={16} /> : <Upload size={16} />}
-      <span>{t.contractFileName ? "استبدال" : "رفع"}</span>
-    </button>
-
-    {/* 💡 زر التحميل: يظهر فقط إذا كان الملف محفوظاً كـ Base64 */}
-    {t.contractFileData && (
-      <a
-        href={t.contractFileData}
-        download={t.contractFileName || "عقد.pdf"}
-        className="inline-flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-white text-sm"
-      >
-        <Download size={16} />
-        <span>تحميل</span>
-      </a>
-    )}
-  </div>
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(t.id, e.target.files?.[0] ?? null)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileRefs.current[t.id]?.click()}
+                        className="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-primary-foreground hover:opacity-90 transition"
+                        title={t.contractFileName ?? "رفع عقد PDF"}
+                      >
+                        <FileText size={16} />
+                        <span>{t.contractFileName ? "تم الحفظ" : "رفع"}</span>
+                      </button>
                     </td>
                   </tr>
                 );
@@ -348,7 +359,7 @@ const handleFileUpload = (tenantId: number, file: File | null) => {
                 <td className="px-3 py-2 text-center">
                   {toArabicNumbers(total)} ج.م
                 </td>
-                <td colSpan={3}></td>
+                <td colSpan={4}></td> {/* تم تعديل الـ colSpan من 3 إلى 4 ليتناسب مع عمود التاريخ الجديد */}
               </tr>
             </tfoot>
           </table>
