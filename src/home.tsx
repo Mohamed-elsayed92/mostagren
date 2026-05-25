@@ -1,6 +1,6 @@
 import {  Link, useNavigate } from "@tanstack/react-router";
 import { useMemo,useEffect, useRef, useState } from "react";
-import { FileText, Upload, Save, Search, Archive as ArchiveIcon } from "lucide-react";
+import { FileText, Upload, Save, Search, Download, Archive as ArchiveIcon } from "lucide-react";
 import "./index.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -16,6 +16,7 @@ type Tenant = {
   contractFileName?: string;
   rentPaid?: boolean;
   prepaidNextMonth?: boolean;
+  contractFileData?: string;
 };
 
 const INITIAL_TENANTS: Tenant[] = [
@@ -92,11 +93,25 @@ function Home() {
   function updateTenant(id: number, patch: Partial<Tenant>) {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
+const handleFileUpload = (tenantId: number, file: File | null) => {
+  if (!file) return;
 
-  function handleFileUpload(id: number, file: File | null) {
-    if (!file) return;
-    updateTenant(id, { contractFileName: file.name });
-  }
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    const base64String = reader.result as string;
+
+    // تحديث حالة المستأجر بالاسم وببيانات الملف المشفرة
+    setTenants((prev) =>
+      prev.map((t) =>
+        t.id === tenantId
+          ? { ...t, contractFileName: file.name, contractFileData: base64String }
+          : t
+      )
+    );
+  };
+  
+  reader.readAsDataURL(file); // تحويل الملف إلى نص Base64 يمكن حفظه في الـ JSON
+};
 
   const navigate = useNavigate();
 
@@ -289,23 +304,37 @@ function Home() {
                     </td>
                     <td className="px-3 py-2">
                       <input
-                        ref={(el) => {
-                          fileRefs.current[t.id] = el;
-                        }}
                         type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        onChange={(e) => handleFileUpload(t.id, e.target.files?.[0] ?? null)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileRefs.current[t.id]?.click()}
-                        className="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-primary-foreground hover:opacity-90 transition"
-                        title={t.contractFileName ?? "رفع عقد PDF"}
-                      >
-                        {t.contractFileName ? <FileText size={16} /> : <Upload size={16} />}
-                        <span>{t.contractFileName ? "تم الحفظ" : "رفع"}</span>
-                      </button>
+    accept="application/pdf"
+    className="hidden"
+    ref={(el) => { fileRefs.current[t.id] = el; }}
+    onChange={(e) => handleFileUpload(t.id, e.target.files?.[0] ?? null)}
+  />
+
+  <div className="flex gap-2">
+    {/* زر الرفع أو الاستبدال */}
+    <button
+      type="button"
+      onClick={() => fileRefs.current[t.id]?.click()}
+      className="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-primary-foreground text-sm"
+      title={t.contractFileName ?? "رفع عقد PDF"}
+    >
+      {t.contractFileName ? <FileText size={16} /> : <Upload size={16} />}
+      <span>{t.contractFileName ? "استبدال" : "رفع"}</span>
+    </button>
+
+    {/* 💡 زر التحميل: يظهر فقط إذا كان الملف محفوظاً كـ Base64 */}
+    {t.contractFileData && (
+      <a
+        href={t.contractFileData}
+        download={t.contractFileName || "عقد.pdf"}
+        className="inline-flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-white text-sm"
+      >
+        <Download size={16} />
+        <span>تحميل</span>
+      </a>
+    )}
+  </div>
                     </td>
                   </tr>
                 );
