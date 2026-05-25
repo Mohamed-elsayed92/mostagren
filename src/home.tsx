@@ -18,12 +18,12 @@ type Tenant = {
 };
 
 const INITIAL_TENANTS: Tenant[] = [
-  { id: 1, name: "أحمد محمد", phone: "01012345678", endDate: "2026-06-10", apartment: "1", floor: "1", rent: 3500 },
-  { id: 2, name: "محمود علي", phone: "01122334455", endDate: "2026-12-01", apartment: "2", floor: "1", rent: 4000 },
-  { id: 3, name: "سارة إبراهيم", phone: "01098765432", endDate: "2027-03-15", apartment: "3", floor: "2", rent: 3800 },
-  { id: 4, name: "خالد حسن", phone: "01234567890", endDate: "2026-05-30", apartment: "4", floor: "2", rent: 4200 },
-  { id: 5, name: "منى سعيد", phone: "01555667788", endDate: "2026-08-20", apartment: "5", floor: "3", rent: 3700 },
-  { id: 6, name: "يوسف عمر", phone: "01699887766", endDate: "2027-01-05", apartment: "6", floor: "3", rent: 4500 },
+  { id: 1, name: "يوسف نزيه حسن قلاش", phone: "01012345678", endDate: "2027-12-31", apartment: "1", floor: "ارضي", rent: 1000 },
+  { id: 2, name: "كريم ابراهيم حافظ مرعي", phone: "01122334455", endDate: "2026-10-31", apartment: "2", floor: "ارضي", rent:1000 },
+  { id: 3, name: "تامر عبد العاطي توفيق", phone: "01098765432", endDate: "2027-10-31", apartment: "3", floor: "ثاني", rent: 1100 },
+  { id: 4, name: "احمد محمد كمال البغدادي", phone: "01234567890", endDate: "2027-12-31", apartment: "4", floor: "ثاني", rent: 1100 },
+  { id: 5, name: "علاء حمدي محمد مرعي", phone: "01555667788", endDate: "2026-09-30", apartment: "5", floor: "ثالث", rent: 750 },
+  { id: 6, name: "محمد ابراهيم حافظ مرعي", phone: "01699887766", endDate: "2026-12-31", apartment: "6", floor: "ثالث", rent: 750},
 ];
 
 function isNearExpiry(endDate: string): boolean {
