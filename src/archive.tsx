@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Trash2, XCircle } from "lucide-react";
+import { Trash2, XCircle, Search } from "lucide-react";
 import "./index.css";
 
 type Tenant = {
@@ -27,14 +27,28 @@ function toArabicNumbers(num: number | string): string {
   return num.toString().replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
 }
 
-
 function Archive() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("tenants_archive");
     if (saved) setSnapshots(JSON.parse(saved) as Snapshot[]);
   }, []);
+
+  const q = query.trim().toLowerCase();
+  const filteredSnapshots = !q
+    ? snapshots
+    : snapshots
+        .map((s) => ({
+          ...s,
+          tenants: s.tenants.filter((t) =>
+            [t.name, t.phone, t.apartment, t.floor, s.monthLabel]
+              .filter(Boolean)
+              .some((v) => String(v).toLowerCase().includes(q)),
+          ),
+        }))
+        .filter((s) => s.tenants.length > 0 || s.monthLabel.toLowerCase().includes(q));
 
   function removeSnapshot(id: string) {
     const next = snapshots.filter((s) => s.id !== id);
@@ -58,9 +72,9 @@ function Archive() {
   return (
     <div dir="rtl" className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h1 className="text-3xl font-bold text-foreground">سجل الإيجارات الشهري</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {snapshots.length > 0 && (
               <>
                 <button
@@ -90,11 +104,24 @@ function Archive() {
           </div>
         </div>
 
+        <div className="relative mb-6 max-w-md">
+          <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ابحث بالاسم أو الهاتف أو الشقة أو الشهر..."
+            className="w-full rounded border border-input bg-background pr-8 pl-3 py-2 text-sm"
+          />
+        </div>
+
         {snapshots.length === 0 ? (
           <p className="text-muted-foreground">لا توجد بيانات محفوظة بعد.</p>
+        ) : filteredSnapshots.length === 0 ? (
+          <p className="text-muted-foreground">لا توجد نتائج مطابقة للبحث.</p>
         ) : (
           <div className="space-y-8">
-            {snapshots.map((snap) => {
+            {filteredSnapshots.map((snap) => {
               const total = snap.tenants.reduce(
                 (s, t) => s + (t.rentPaid ? Number(t.rent) || 0 : 0),
                 0,

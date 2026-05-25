@@ -1,6 +1,6 @@
 import {  Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { FileText, Upload, Save, Archive as ArchiveIcon } from "lucide-react";
+import { useMemo,useEffect, useRef, useState } from "react";
+import { FileText, Upload, Save, Search, Archive as ArchiveIcon } from "lucide-react";
 import "./index.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -15,6 +15,7 @@ type Tenant = {
   rent: number;
   contractFileName?: string;
   rentPaid?: boolean;
+  prepaidNextMonth?: boolean;
 };
 
 const INITIAL_TENANTS: Tenant[] = [
@@ -51,12 +52,20 @@ function formatArabicDate(dateString: string): string {
   }).format(date);
 }
 
+function arabicMonthLabel(d: Date): string {
+  return new Intl.DateTimeFormat("ar-EG", { month: "long", year: "numeric" })
+    .format(d)
+    .replace(/[0-9]/g, (x) => "٠١٢٣٤٥٦٧٨٩"[parseInt(x)]);
+}
+
 function Home() {
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     if (typeof window === "undefined") return INITIAL_TENANTS;
-    const saved = localStorage.getItem("tenants_v2");
+    const saved = localStorage.getItem("tenants");
     return saved ? (JSON.parse(saved) as Tenant[]) : INITIAL_TENANTS;
   });
+
+  const [query, setQuery] = useState("");
 
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
@@ -64,8 +73,16 @@ function Home() {
     localStorage.setItem("tenants", JSON.stringify(tenants));
   }, [tenants]);
 
-  // ✅ الإصلاح: نجمع فقط الإيجارات المدفوعة (rentPaid = true)،
-  // ونتأكد أن القيمة رقم صحيح قبل الجمع لتفادي NaN أو تجميع نصوص.
+  const filteredTenants = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return tenants;
+    return tenants.filter((t) =>
+      [t.name, t.phone, t.apartment, t.floor]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [tenants, query]);
+
   const total = tenants.reduce((sum, t) => {
     if (!t.rentPaid) return sum;
     const rent = Number(t.rent);
@@ -85,12 +102,12 @@ function Home() {
 
   function saveMonth() {
     const now = new Date();
-    const monthLabel = new Intl.DateTimeFormat("ar-EG", {
-      month: "long",
-      year: "numeric",
-    }).format(now).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
+    const monthLabel = arabicMonthLabel(now);
+    const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextLabel = arabicMonthLabel(nextDate);
 
-    const snapshot = {
+    // الشهر الحالي: نحفظ الجميع كما هم
+    const currentSnapshot = {
       id: now.toISOString(),
       monthLabel,
       savedAt: now.toISOString(),
@@ -98,20 +115,64 @@ function Home() {
     };
 
     const prev = localStorage.getItem("tenants_archive");
-    const archive: typeof snapshot[] = prev ? JSON.parse(prev) : [];
+    const archive: typeof currentSnapshot[] = prev ? JSON.parse(prev) : [];
 
-    const existingIndex = archive.findIndex((s) => s.monthLabel === monthLabel);
-    if (existingIndex !== -1) {
-      // استبدال الشهر الموجود بدلاً من الإضافة المكررة
-      archive[existingIndex] = snapshot;
-    } else {
-      archive.unshift(snapshot);
+    const curIdx = archive.findIndex((s) => s.monthLabel === monthLabel);
+    if (curIdx !== -1) archive[curIdx] = currentSnapshot;
+    else archive.unshift(currentSnapshot);
+
+    // الشهر القادم: ندمج المدفوعين مقدماً داخل سجل الشهر القادم
+    const prepaid = tenants.filter((t) => t.prepaidNextMonth);
+    if (prepaid.length > 0) {
+      const nextIdx = archive.findIndex((s) => s.monthLabel === nextLabel);
+      let nextSnap: typeof currentSnapshot;
+      if (nextIdx !== -1) {
+        nextSnap = archive[nextIdx];
+      } else {
+        nextSnap = {
+          id: nextDate.toISOString(),
+          monthLabel: nextLabel,
+          savedAt: now.toISOString(),
+          tenants: tenants.map((t) => ({
+            ...JSON.parse(JSON.stringify(t)),
+            rent: 0,
+            rentPaid: false,
+            prepaidNextMonth: false,
+          })),
+        };
+      }
+      // علّم المدفوعين مقدماً كمدفوعين في الشهر القادم بقيمة إيجارهم الحالية
+      nextSnap.tenants = nextSnap.tenants.map((t) => {
+        const p = prepaid.find((x) => x.id === t.id);
+        if (!p) return t;
+        return { ...t, rent: Number(p.rent) || 0, rentPaid: true, prepaidNextMonth: false };
+      });
+      // أضف أي مستأجر مدفوع مقدماً غير موجود في السنابشوت القادم
+      prepaid.forEach((p) => {
+        if (!nextSnap.tenants.find((t) => t.id === p.id)) {
+          nextSnap.tenants.push({
+            ...JSON.parse(JSON.stringify(p)),
+            rentPaid: true,
+            prepaidNextMonth: false,
+          });
+        }
+      });
+      if (nextIdx !== -1) archive[nextIdx] = nextSnap;
+      else archive.unshift(nextSnap);
     }
 
     localStorage.setItem("tenants_archive", JSON.stringify(archive));
 
-    // مسح قيم الإيجار فقط وإعادة تعيين حالة الدفع لشهر جديد
-    setTenants((prevT) => prevT.map((t) => ({ ...t, rent: 0, rentPaid: false })));
+    // تجهيز الشهر الجديد:
+    // - من دفع مقدماً → يصبح مدفوعاً تلقائياً بنفس قيمة الإيجار
+    // - الباقي → تصفّر قيمة الإيجار وحالة الدفع
+    setTenants((prevT) =>
+      prevT.map((t) =>
+        t.prepaidNextMonth
+          ? { ...t, rentPaid: true, prepaidNextMonth: false }
+          : { ...t, rent: 0, rentPaid: false },
+      ),
+    );
 
     navigate({ to: "/archive" });
   }
@@ -119,9 +180,19 @@ function Home() {
   return (
     <div dir="rtl" className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <h1 className="text-3xl font-bold text-foreground">إدارة المستأجرين</h1>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            <div className="relative">
+              <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="ابحث بالاسم أو الهاتف أو الشقة..."
+                className="rounded border border-input bg-background pr-8 pl-3 py-2 text-sm w-64"
+              />
+            </div>
             <button
               type="button"
               onClick={saveMonth}
@@ -140,7 +211,7 @@ function Home() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground mb-6">
-          الخلايا الحمراء تشير إلى عقود ستنتهي خلال شهر أو منتهية بالفعل.
+          الخلايا الحمراء تشير إلى عقود ستنتهي خلال شهر أو منتهية بالفعل. علّم "دفع مقدم" لمن سدّد إيجار الشهر القادم.
         </p>
 
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -153,12 +224,13 @@ function Home() {
                 <th className="px-3 py-2">رقم الشقة</th>
                 <th className="px-3 py-2">رقم الدور</th>
                 <th className="px-3 py-2">قيمة الإيجار</th>
+                <th className="px-3 py-2">دفع مقدم</th>
                 <th className="px-3 py-2">تاريخ انتهاء العقد</th>
                 <th className="px-3 py-2">العقد (PDF)</th>
               </tr>
             </thead>
             <tbody>
-              {tenants.map((t, idx) => {
+              {filteredTenants.map((t, idx) => {
                 const alertRow = isNearExpiry(t.endDate) || isExpired(t.endDate);
                 const highlightCls = alertRow ? "bg-red-100 text-red-900 font-semibold" : "";
 
@@ -189,13 +261,22 @@ function Home() {
                             );
                             updateTenant(t.id, { rent: english === "" ? 0 : Number(english) });
                           }}
-                          disabled={!t.rentPaid}
+                          disabled={!t.rentPaid && !t.prepaidNextMonth}
                           className={`w-24 rounded border border-input px-2 py-1 text-center ${
-                            t.rentPaid ? "bg-background" : "bg-muted text-muted-foreground cursor-not-allowed"
+                            t.rentPaid || t.prepaidNextMonth ? "bg-background" : "bg-muted text-muted-foreground cursor-not-allowed"
                           }`}
                         />
                         <span>ج.م</span>
                       </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={!!t.prepaidNextMonth}
+                        onChange={(e) => updateTenant(t.id, { prepaidNextMonth: e.target.checked })}
+                        className="h-4 w-4 accent-primary"
+                        title="دفع إيجار الشهر القادم مقدماً"
+                      />
                     </td>
                     <td className="px-3 py-2 relative">
                       <span>{formatArabicDate(t.endDate)}</span>
@@ -238,7 +319,7 @@ function Home() {
                 <td className="px-3 py-2 text-center">
                   {toArabicNumbers(total)} ج.م
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           </table>
