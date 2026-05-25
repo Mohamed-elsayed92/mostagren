@@ -34,7 +34,9 @@ const archiveRoute = createRoute({
 // 4. بناء الـ Router
 const routeTree = rootRoute.addChildren([indexRoute, archiveRoute])
 
-const router = createRouter({ routeTree })
+const router = createRouter({ routeTree,
+  basepath: '/mostagren',
+ })
 
 declare module '@tanstack/react-router' {
   interface Register {
