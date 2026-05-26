@@ -13,6 +13,7 @@ type Tenant = {
   rent: number;
   contractFileName?: string;
   rentPaid?: boolean;
+  paymentDate?: string;
 };
 
 type Snapshot = {
@@ -26,7 +27,17 @@ function toArabicNumbers(num: number | string): string {
   if (num === undefined || num === null) return "";
   return num.toString().replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
 }
-
+function formatArabicDate(dateString: string): string {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  
+  return toArabicNumbers(`${year}/${month}/${day}`);
+}
 function Archive() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [query, setQuery] = useState("");
@@ -148,6 +159,7 @@ function Archive() {
                           <th className="px-3 py-2">رقم الشقة</th>
                           <th className="px-3 py-2">رقم الدور</th>
                           <th className="px-3 py-2">قيمة الإيجار</th>
+                              <th className="px-3 py-2">تاريخ الدفع</th>
                           <th className="px-3 py-2">الحالة</th>
                         </tr>
                       </thead>
@@ -162,6 +174,13 @@ function Archive() {
                             <td className="px-3 py-2">
                               {toArabicNumbers(t.rent)} ج.م
                             </td>
+          <td className="px-3 py-2">
+  {t.paymentDate ? (
+    <span>{formatArabicDate(t.paymentDate)}</span>
+  ) : (
+    <span className="text-muted-foreground text-xs">-</span>
+  )}
+</td>
                             <td className="px-3 py-2">
                               {t.rentPaid ? (
                                 <span className="text-green-700">مدفوع</span>

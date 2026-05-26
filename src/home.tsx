@@ -1,6 +1,6 @@
-import {  Link, useNavigate } from "@tanstack/react-router";
-import { useMemo,useEffect, useRef, useState } from "react";
-import { FileText, Upload, Save, Search, Download, Archive as ArchiveIcon } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useMemo, useEffect, useRef, useState } from "react";
+import { FileText, Upload, Save, Search, Archive as ArchiveIcon } from "lucide-react";
 import "./index.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,11 +22,11 @@ type Tenant = {
 
 const INITIAL_TENANTS: Tenant[] = [
   { id: 1, name: "يوسف نزيه حسن قلاش", phone: "01012345678", endDate: "2027-12-31", apartment: "1", floor: "ارضي", rent: 1000 },
-  { id: 2, name: "كريم ابراهيم حافظ مرعي", phone: "01122334455", endDate: "2026-10-31", apartment: "2", floor: "ارضي", rent:1000 },
+  { id: 2, name: "كريم ابراهيم حافظ مرعي", phone: "01122334455", endDate: "2026-10-31", apartment: "2", floor: "ارضي", rent: 1000 },
   { id: 3, name: "تامر عبد العاطي توفيق", phone: "01098765432", endDate: "2027-10-31", apartment: "3", floor: "ثاني", rent: 1100 },
   { id: 4, name: "احمد محمد كمال البغدادي", phone: "01234567890", endDate: "2027-12-31", apartment: "4", floor: "ثاني", rent: 1100 },
   { id: 5, name: "علاء حمدي محمد مرعي", phone: "01555667788", endDate: "2026-09-30", apartment: "5", floor: "ثالث", rent: 750 },
-  { id: 6, name: "محمد ابراهيم حافظ مرعي", phone: "01699887766", endDate: "2026-12-31", apartment: "6", floor: "ثالث", rent: 750},
+  { id: 6, name: "محمد ابراهيم حافظ مرعي", phone: "01699887766", endDate: "2026-12-31", apartment: "6", floor: "ثالث", rent: 750 },
 ];
 
 function isNearExpiry(endDate: string): boolean {
@@ -45,7 +45,7 @@ function toArabicNumbers(num: number | string): string {
 }
 
 function formatArabicDate(dateString: string): string {
-  if (!dateString) return "—"; // تعود بشرطة إذا لم يكن هناك تاريخ بعد
+  if (!dateString) return "—";
   const date = new Date(dateString);
   return new Intl.DateTimeFormat("ar-EG", {
     day: "numeric",
@@ -68,7 +68,6 @@ function Home() {
   });
 
   const [query, setQuery] = useState("");
-
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   useEffect(() => {
@@ -95,9 +94,41 @@ function Home() {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
 
+  // 💡 تحسين الدالة لتقرأ الملف وتحوله لـ Base64 لكي يخزن في السنابشوت
   function handleFileUpload(id: number, file: File | null) {
     if (!file) return;
-    updateTenant(id, { contractFileName: file.name });
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64Data = e.target?.result as string;
+      updateTenant(id, {
+        contractFileName: file.name,
+        contractFileData: base64Data,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // 💡 إضافة دالة تحميل العقد المفقودة
+  function downloadContract(t: Tenant) {
+    if (!t.contractFileData) return;
+    const link = document.createElement("a");
+    link.href = t.contractFileData;
+    link.download = t.contractFileName || `عقد_${t.name}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // 💡 إضافة دالة حذف العقد المفقودة
+  function removeContract(id: number) {
+    if (!window.confirm("هل أنت متأكد من حذف ملف العقد؟")) return;
+    updateTenant(id, {
+      contractFileName: undefined,
+      contractFileData: undefined,
+    });
+    if (fileRefs.current[id]) {
+      fileRefs.current[id]!.value = "";
+    }
   }
 
   const navigate = useNavigate();
@@ -108,7 +139,6 @@ function Home() {
     const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const nextLabel = arabicMonthLabel(nextDate);
 
-    // الشهر الحالي: نحفظ الجميع كما هم
     const currentSnapshot = {
       id: now.toISOString(),
       monthLabel,
@@ -117,13 +147,12 @@ function Home() {
     };
 
     const prev = localStorage.getItem("tenants_archive");
-    const archive: typeof currentSnapshot[] = prev ? JSON.parse(prev) : [];
+    const archive: any[] = prev ? JSON.parse(prev) : [];
 
     const curIdx = archive.findIndex((s) => s.monthLabel === monthLabel);
     if (curIdx !== -1) archive[curIdx] = currentSnapshot;
     else archive.unshift(currentSnapshot);
 
-    // الشهر القادم: ندمج المدفوعين مقدماً داخل سجل الشهر القادم
     const prepaid = tenants.filter((t) => t.prepaidNextMonth);
     if (prepaid.length > 0) {
       const nextIdx = archive.findIndex((s) => s.monthLabel === nextLabel);
@@ -140,23 +169,23 @@ function Home() {
             rent: 0,
             rentPaid: false,
             prepaidNextMonth: false,
-            paymentDate: undefined, // تصفير التاريخ افتراضياً للشهر الجديد
+            paymentDate: undefined,
           })),
         };
       }
-      // علّم المدفوعين مقدماً كمدفوعين في الشهر القادم بقيمة إيجارهم الحالية
+      
       nextSnap.tenants = nextSnap.tenants.map((t) => {
         const p = prepaid.find((x) => x.id === t.id);
         if (!p) return t;
-        return { 
-          ...t, 
-          rent: Number(p.rent) || 0, 
-          rentPaid: true, 
+        return {
+          ...t,
+          rent: Number(p.rent) || 0,
+          rentPaid: true,
           prepaidNextMonth: false,
-          paymentDate: p.paymentDate || now.toISOString().split("T")[0] // ترحيل تاريخ دفع المقدم
+          paymentDate: p.paymentDate || now.toISOString().split("T")[0],
         };
       });
-      // أضف أي مستأجر مدفوع مقدماً غير موجود في السنابشوت القادم
+
       prepaid.forEach((p) => {
         if (!nextSnap.tenants.find((t) => t.id === p.id)) {
           nextSnap.tenants.push({
@@ -172,12 +201,11 @@ function Home() {
 
     localStorage.setItem("tenants_archive", JSON.stringify(archive));
 
-    // تجهيز الشهر الجديد في الصفحة الرئيسية حية:
     setTenants((prevT) =>
       prevT.map((t) =>
         t.prepaidNextMonth
           ? { ...t, rentPaid: true, prepaidNextMonth: false }
-          : { ...t, rent: 0, rentPaid: false, paymentDate: undefined }, // تصفير حالة وتاريخ الدفع للباقي
+          : { ...t, rent: 0, rentPaid: false, paymentDate: undefined },
       ),
     );
 
@@ -203,7 +231,7 @@ function Home() {
             <button
               type="button"
               onClick={saveMonth}
-              className="inline-flex items-center gap-1 rounded bg-primary px-3 py-2 text-sm text-primary-foreground hover:opacity-90"
+              className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-2 text-sm text-primary-foreground hover:opacity-90"
             >
               <Save size={16} />
               <span>حفظ الشهر</span>
@@ -232,7 +260,7 @@ function Home() {
                 <th className="px-3 py-2">رقم الدور</th>
                 <th className="px-3 py-2">قيمة الإيجار</th>
                 <th className="px-3 py-2">دفع مقدم</th>
-                <th className="px-3 py-2">تاريخ الدفع</th> {/* 💡 تم إضافة العمود في الهيدر */}
+                <th className="px-3 py-2">تاريخ الدفع</th>
                 <th className="px-3 py-2">تاريخ انتهاء العقد</th>
                 <th className="px-3 py-2">العقد (PDF)</th>
               </tr>
@@ -256,10 +284,9 @@ function Home() {
                           checked={!!t.rentPaid}
                           onChange={(e) => {
                             const isChecked = e.target.checked;
-                            updateTenant(t.id, { 
+                            updateTenant(t.id, {
                               rentPaid: isChecked,
-                              // 💡 تسجيل تاريخ اليوم تلقائياً عند الدفع، ومسحه عند الإلغاء
-                              paymentDate: isChecked ? new Date().toISOString().split("T")[0] : undefined 
+                              paymentDate: isChecked ? new Date().toISOString().split("T")[0] : undefined,
                             });
                           }}
                           className="h-4 w-4 accent-primary"
@@ -290,10 +317,9 @@ function Home() {
                         checked={!!t.prepaidNextMonth}
                         onChange={(e) => {
                           const isChecked = e.target.checked;
-                          updateTenant(t.id, { 
+                          updateTenant(t.id, {
                             prepaidNextMonth: isChecked,
-                            // 💡 تسجيل التاريخ أيضاً إذا تم تفعيل الدفع المقدم للمستقبل
-                            paymentDate: isChecked ? new Date().toISOString().split("T")[0] : t.paymentDate
+                            paymentDate: isChecked ? new Date().toISOString().split("T")[0] : t.paymentDate,
                           });
                         }}
                         className="h-4 w-4 accent-primary"
@@ -301,7 +327,6 @@ function Home() {
                       />
                     </td>
 
-                    {/* 💡 عمود تاريخ الدفع التفاعلي المضاف حديثاً للجدول */}
                     <td className="px-3 py-2 relative">
                       {t.rentPaid || t.prepaidNextMonth ? (
                         <>
@@ -337,15 +362,38 @@ function Home() {
                         className="hidden"
                         onChange={(e) => handleFileUpload(t.id, e.target.files?.[0] ?? null)}
                       />
-                      <button
-                        type="button"
-                        onClick={() => fileRefs.current[t.id]?.click()}
-                        className="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-primary-foreground hover:opacity-90 transition"
-                        title={t.contractFileName ?? "رفع عقد PDF"}
-                      >
-                        <FileText size={16} />
-                        <span>{t.contractFileName ? "تم الحفظ" : "رفع"}</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => fileRefs.current[t.id]?.click()}
+                          className="inline-flex items-center gap-1 rounded bg-blue-600 px-2 py-1 text-primary-foreground hover:opacity-90 transition"
+                          title={t.contractFileName ?? "رفع عقد PDF"}
+                        >
+                          <Upload size={16} />
+                          <span>{t.contractFileData ? "استبدال" : "رفع"}</span>
+                        </button>
+                        {t.contractFileData && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => downloadContract(t)}
+                              className="inline-flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-white hover:opacity-90 transition"
+                              title={t.contractFileName}
+                            >
+                              <FileText size={16} />
+                              <span>تحميل</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeContract(t.id)}
+                              className="inline-flex items-center justify-center rounded bg-red-600 px-2 py-1 text-white hover:opacity-90 transition"
+                              title="حذف العقد"
+                            >
+                              ✕
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -359,7 +407,7 @@ function Home() {
                 <td className="px-3 py-2 text-center">
                   {toArabicNumbers(total)} ج.م
                 </td>
-                <td colSpan={4}></td> {/* تم تعديل الـ colSpan من 3 إلى 4 ليتناسب مع عمود التاريخ الجديد */}
+                <td colSpan={4}></td>
               </tr>
             </tfoot>
           </table>
