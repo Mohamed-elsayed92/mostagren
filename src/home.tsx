@@ -259,6 +259,7 @@ function Home() {
                 <th className="px-3 py-2">رقم الشقة</th>
                 <th className="px-3 py-2">رقم الدور</th>
                 <th className="px-3 py-2">قيمة الإيجار</th>
+                  <th className="px-3 py-2">حالة الدفع</th>
                 <th className="px-3 py-2">دفع مقدم</th>
                 <th className="px-3 py-2">تاريخ الدفع</th>
                 <th className="px-3 py-2">تاريخ انتهاء العقد</th>
@@ -277,40 +278,43 @@ function Home() {
                     <td className="px-3 py-2">{toArabicNumbers(t.phone)}</td>
                     <td className="px-3 py-2">{toArabicNumbers(t.apartment)}</td>
                     <td className="px-3 py-2">{toArabicNumbers(t.floor)}</td>
+                   <td className={`px-3 py-2 font-semibold tabular-nums ${t.rentPaid ? "text-green-700" : ""}`}>
+                      {toArabicNumbers(t.rent)} ج.م
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={!!t.rentPaid}
-                          onChange={(e) => {
-                            const isChecked = e.target.checked;
+                        {t.rentPaid ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs font-bold border border-green-300">
+                            ✓ مدفوع
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-700 px-2 py-0.5 text-xs font-bold border border-red-200">
+                            غير مدفوع
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const checked = !t.rentPaid;
                             updateTenant(t.id, {
-                              rentPaid: isChecked,
-                              paymentDate: isChecked ? new Date().toISOString().split("T")[0] : undefined,
+                              rentPaid: checked,
+                              paymentDate: checked
+                                ? (t.paymentDate || new Date().toISOString().slice(0, 10))
+                                : undefined,
                             });
                           }}
-                          className="h-4 w-4 accent-primary"
-                          title="تم الدفع"
-                        />
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={toArabicNumbers(t.rent)}
-                          onChange={(e) => {
-                            const cleaned = e.target.value.replace(/[^\d٠-٩]/g, "");
-                            const english = cleaned.replace(/[٠-٩]/g, (d) =>
-                              "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString()
-                            );
-                            updateTenant(t.id, { rent: english === "" ? 0 : Number(english) });
-                          }}
-                          disabled={!t.rentPaid && !t.prepaidNextMonth}
-                          className={`w-24 rounded border border-input px-2 py-1 text-center ${
-                            t.rentPaid || t.prepaidNextMonth ? "bg-background" : "bg-muted text-muted-foreground cursor-not-allowed"
+                          className={`rounded px-2 py-1 text-xs font-medium transition ${
+                            t.rentPaid
+                              ? "bg-muted text-foreground hover:bg-accent border border-input"
+                              : "bg-primary text-primary-foreground hover:opacity-90"
                           }`}
-                        />
-                        <span>ج.م</span>
+                          title={t.rentPaid ? "تراجع عن الدفع" : "تأكيد الدفع"}
+                        >
+                          {t.rentPaid ? "تراجع" : "دفع"}
+                        </button>
                       </div>
                     </td>
+
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"
@@ -326,23 +330,30 @@ function Home() {
                         title="دفع إيجار الشهر القادم مقدماً"
                       />
                     </td>
-
-                    <td className="px-3 py-2 relative">
-                      {t.rentPaid || t.prepaidNextMonth ? (
-                        <>
-                          <span className="text-xs text-muted-foreground block">{formatArabicDate(t.paymentDate || "")}</span>
-                          <input
-                            type="date"
-                            value={t.paymentDate || ""}
-                            onChange={(e) => updateTenant(t.id, { paymentDate: e.target.value })}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          />
-                        </>
+  <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={!!t.prepaidNextMonth}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          updateTenant(t.id, {
+                            prepaidNextMonth: checked,
+                            paymentDate: checked || t.rentPaid
+                              ? (t.paymentDate || new Date().toISOString().slice(0, 10))
+                              : t.paymentDate,
+                          });
+                        }}
+                        className="h-4 w-4 accent-primary"
+                        title="دفع إيجار الشهر القادم مقدماً"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      {t.paymentDate ? (
+                        <span className="text-sm">{formatArabicDate(t.paymentDate)}</span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </td>
-
                     <td className="px-3 py-2 relative">
                       <span>{formatArabicDate(t.endDate)}</span>
                       <input
@@ -352,7 +363,7 @@ function Home() {
                         className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                          <td className="px-3 py-2">
                       <input
                         ref={(el) => {
                           fileRefs.current[t.id] = el;
@@ -407,7 +418,7 @@ function Home() {
                 <td className="px-3 py-2 text-center">
                   {toArabicNumbers(total)} ج.م
                 </td>
-                <td colSpan={4}></td>
+                <td colSpan={5}></td>
               </tr>
             </tfoot>
           </table>
